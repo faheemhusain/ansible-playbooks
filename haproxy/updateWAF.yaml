@@ -1,0 +1,95 @@
+---
+- name: HAProxy WAF upgrade from v2.3r1 to v2.6r1
+  hosts: all
+
+  tasks:
+  - name: Ping
+    ansible.builtin.ping:
+
+
+  - name: v2.3r1 apt package installation status
+    ansible.builtin.apt:
+      pkg:
+        - hapee-2.3r1-lb
+        - hapee-2.3r1-lb-wafadvanced
+    check_mode: true
+
+  - name: v2.6r1 apt package installation status
+    ansible.builtin.apt:
+      pkg:
+        - hapee-2.6r1-lb
+        - hapee-2.6r1-lb-wafadvanced
+    check_mode: true
+    register: v26r1present
+    ignore_errors: true # to ignore failure and continue to run the remaining tasks
+
+  - name: Retrieve HAProxy Enterprise license keys
+    ansible.builtin.shell: "awk -F/ '{print $7}' /etc/apt/sources.list.d/hapee.list | sed 's/\\(.*\\)-[^-]*/\\1/' | uniq"
+    register: licensekeys
+    when: v26r1present is failed # conditional task if package v2.6r1 doesn't exists
+
+  - name: Install HAProxy Enterprise v2.6r1
+    ansible.builtin.shell: |
+      wget https://www.haproxy.com/static/install_haproxy_enterprise.sh
+      sudo bash ./install_haproxy_enterprise.sh --version 2.6r1 --key {{ licensekeys.stdout }}
+    when: v26r1present is failed # conditional task if package v2.6r1 doesn't exists
+
+  - name: Copy allowlist.acl
+    ansible.builtin.copy:
+      src: /etc/hapee-2.3/allowlist.acl
+      dest: /etc/hapee-2.6/allowlist.acl
+      remote_src: yes
+      owner: root
+      group: hapee
+      mode: '0644'
+      force: false
+    become: yes
+
+  - name: Copy actions.rules
+    ansible.builtin.copy:
+      src: /etc/hapee-2.3/actions.rules
+      dest: /etc/hapee-2.6/actions.rules
+      remote_src: yes
+      owner: root
+      group: hapee
+      mode: '0644'
+      force: false
+    become: yes
+
+  - name: Update hapee-lb.cfg config file
+    ansible.builtin.shell: sed 's/hapee-2.3/hapee-2.6/' /etc/hapee-2.3/hapee-lb.cfg > /etc/hapee-2.6/hapee-lb.cfg
+    become: yes
+
+  - name: Run hapee-lb configuration check
+    ansible.builtin.shell: "/opt/hapee-2.6/sbin/hapee-lb -c -f /etc/hapee-2.6/hapee-lb.cfg"
+    register: hapee_lb_output
+    ignore_errors: true  # Allows the task to continue even if the command fails
+    check_mode: no
+
+  - name: Check if configuration is valid
+    ansible.builtin.debug:
+      msg: "Configuration file is valid"
+    when: "'Configuration file is valid' in hapee_lb_output.stdout"
+
+  - name: Fail if configuration is invalid
+    ansible.builtin.fail:
+      msg: |
+        Configuration file is not valid!
+        Output:
+        {{ hapee_lb_output.stderr | to_nice_yaml }}
+    when: "'Configuration file is valid' not in hapee_lb_output.stdout"
+
+  - name: Stop v2.3 service, if running
+    ansible.builtin.systemd_service:
+      name: hapee-2.3-lb
+      state: stopped
+    become: yes
+
+  - name: Start v2.6 service
+    ansible.builtin.systemd_service:
+      name: hapee-2.6-lb
+      state: started
+    become: yes
+
+
+

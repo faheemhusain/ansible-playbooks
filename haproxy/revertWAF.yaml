@@ -1,0 +1,19 @@
+---
+- name: HAProxy WAF reverting to v2.3r1
+  hosts: all
+
+  tasks:
+  - name: Ping
+    ansible.builtin.ping:
+
+  - name: Stop v2.6 service, if running
+    ansible.builtin.systemd_service:
+      name: hapee-2.6-lb
+      state: stopped
+    become: yes
+
+  - name: Start v2.3 service
+    ansible.builtin.systemd_service:
+      name: hapee-2.3-lb
+      state: started
+    become: yes

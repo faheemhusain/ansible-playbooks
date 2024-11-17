@@ -1,0 +1,63 @@
+---
+- name: WAF module pre-requisites verification tasks
+  hosts: all
+
+  tasks:
+    #  - name: Ping
+    #    ansible.builtin.ping:
+
+
+  - name: apt package installation status
+    ansible.builtin.apt:
+      pkg:
+        - hapee-2.3r1-lb
+        - hapee-2.3r1-lb-wafadvanced
+
+
+  - name: Core rules status collect
+    ansible.builtin.stat:
+      path: /etc/hapee-2.3/waf_core.rules
+    register: stc
+
+  - name: Core rules exist or not
+    debug:
+      var: stc.stat.exists
+
+  - name: Core rules checksum
+    debug:
+      var: stc.stat.checksum
+
+
+  - name: Action rules status collect
+    ansible.builtin.stat:
+      path: /etc/hapee-2.3/actions.rules
+    register: st
+
+
+  - name: Action rules exist or not
+    debug:
+      var: st.stat.exists
+
+  - name: Action rules checksum
+    debug:
+      var: st.stat.checksum
+
+  - name: Copy action.rules
+    ansible.builtin.copy:
+      src: /home/faheemh/ansible/RED/haproxy_WAF/actions.rules
+      dest: /etc/hapee-2.3/actions.rules
+      owner: root
+      group: hapee
+      mode: '0644'
+      force: false
+    become: yes
+
+  - name: Copy waf_core.rules
+    ansible.builtin.copy:
+      src: /home/faheemh/ansible/RED/haproxy_WAF/waf_core.rules
+      dest: /etc/hapee-2.3/waf_core.rules
+      owner: root
+      group: hapee
+      mode: '0644'
+      force: false
+    become: yes 
